@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment (never commit secrets)
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# Build outputs
+dist/
+build/
+frontend/dist/
+*.tsbuildinfo
+
+# Backend uploads (user-uploaded files)
+backend/uploads/
+
+# Logs
+*.log
+npm-debug.log*
+output.log
+
+# OS and IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Optional / local
+*.local
+.cache/
+
+# Vercel
+.vercel
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+*.bak
+schema_dump.txt
+table_desc.txt
