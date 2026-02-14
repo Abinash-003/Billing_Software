@@ -12,7 +12,10 @@ const app = express();
 
 // Middlewares
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors());
+app.use(cors({
+    origin: 'https://mnb-billing-software.vercel.app/',
+    credentials: true
+}));
 app.use(morgan('dev'));
 app.use(compression());
 app.use(express.json());
