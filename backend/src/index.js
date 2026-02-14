@@ -47,8 +47,13 @@ const startServer = async () => {
     app.use('/api/v1/receive-stock', receiveStockRoutes);
 
     // Health Check
-    app.get('/health', (req, res) => {
-        res.status(200).json({ status: 'OK', message: 'Server is running' });
+    app.get('/health', async (req, res) => {
+        try {
+            await require('./config/db').pool.query('SELECT 1');
+            res.status(200).json({ status: 'OK', message: 'Server is running and DB checks out' });
+        } catch (error) {
+            res.status(500).json({ status: 'ERROR', message: 'Database connection failed', error: error.message });
+        }
     });
 
     // 404

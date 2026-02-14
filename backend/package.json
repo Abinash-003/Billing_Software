@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
+    "backup-db": "node src/utils/backupDb.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

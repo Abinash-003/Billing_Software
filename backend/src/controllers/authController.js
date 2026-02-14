@@ -9,12 +9,19 @@ const loginUser = asyncHandler(async (req, res) => {
         throw new Error('Please provide username and password');
     }
 
-    const result = await authService.login(username, password);
+    try {
+        const result = await authService.login(username, password);
 
-    res.status(200).json({
-        success: true,
-        data: result
-    });
+        res.status(200).json({
+            success: true,
+            data: result
+        });
+    } catch (error) {
+        if (error.message === 'Invalid credentials') {
+            res.status(401);
+        }
+        throw error;
+    }
 });
 
 const getMe = asyncHandler(async (req, res) => {
