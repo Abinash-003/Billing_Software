@@ -68,3 +68,7 @@ The API follows REST standards with versioning `/api/v1`.
 - `GET /api/v1/products` - List all products
 - `POST /api/v1/bills` - Generate new bill
 - `GET /api/v1/bills/reports` - Fetch sales metrics (Admin only)
+
+## Repository & Deployment
+- **GitHub:** [Abinash-003/Billing_Software](https://github.com/Abinash-003/Billing_Software)
+- **Deploy frontend on Vercel:** See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for step-by-step GitHub push, environment variables, and Vercel configuration (root: `frontend`, build: `npm run build`, output: `dist`, set `VITE_API_URL` to your backend API URL).

@@ -34,9 +34,11 @@ const deleteProduct = async (id) => {
 };
 
 const searchProducts = async (term) => {
+    const t = typeof term === 'string' ? term.trim() : '';
+    if (!t) return [];
     const [rows] = await pool.query(
         'SELECT * FROM products WHERE name LIKE ? OR category LIKE ? OR barcode = ?',
-        [`%${term}%`, `%${term}%`, term]
+        [`%${t}%`, `%${t}%`, t]
     );
     return rows;
 };

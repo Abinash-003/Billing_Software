@@ -2,6 +2,7 @@ const express = require('express');
 const {
     generateBill,
     getBills,
+    getBillingHistory,
     getBill,
     getReports,
     getTopProducts,
@@ -21,6 +22,7 @@ router.use(protect);
 router.post('/', createBillValidation, validate, generateBill);
 router.get('/stats', getDashboardStats);
 router.get('/', getBills);
+router.get('/history', getBillingHistory);
 router.get('/reports', authorize('ADMIN'), getReports);
 router.get('/top-products', authorize('ADMIN'), getTopProducts);
 router.get('/customers', authorize('ADMIN'), getCustomers);

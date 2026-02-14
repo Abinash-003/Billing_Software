@@ -80,6 +80,44 @@ const getRecentBills = async () => {
     return rows;
 };
 
+const getBillingHistory = async (filters = {}) => {
+    const { dateFrom, dateTo, q, limit = 100 } = filters;
+    let where = [];
+    let params = [];
+
+    if (dateFrom) {
+        where.push('DATE(b.created_at) >= ?');
+        params.push(dateFrom);
+    }
+    if (dateTo) {
+        where.push('DATE(b.created_at) <= ?');
+        params.push(dateTo);
+    }
+    if (q && String(q).trim()) {
+        where.push('(b.bill_number LIKE ? OR b.customer_name LIKE ? OR b.customer_phone LIKE ?)');
+        const term = `%${String(q).trim()}%`;
+        params.push(term, term, term);
+    }
+
+    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const limitVal = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
+
+    const [rows] = await pool.query(
+        `SELECT b.id, b.bill_number, b.customer_name, b.customer_phone, b.grand_total, b.created_at, u.full_name as cashier_name,
+         COALESCE(SUM((bi.unit_price - COALESCE(p.cost_price, 0)) * bi.quantity), 0) as profit
+         FROM bills b
+         JOIN users u ON b.cashier_id = u.id
+         LEFT JOIN bill_items bi ON b.id = bi.bill_id
+         LEFT JOIN products p ON bi.product_id = p.id
+         ${whereClause}
+         GROUP BY b.id
+         ORDER BY b.created_at DESC
+         LIMIT ?`,
+        [...params, limitVal]
+    );
+    return rows;
+};
+
 const getBillDetails = async (id) => {
     const [billRows] = await pool.query(
         `SELECT b.*, u.full_name as cashier_name 
@@ -256,6 +294,7 @@ const getSalesByTime = async () => {
 module.exports = {
     createBill,
     getRecentBills,
+    getBillingHistory,
     getBillDetails,
     getSalesReport,
     getTopProducts,

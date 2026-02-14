@@ -40,7 +40,7 @@ const DashboardLayout = () => {
     ];
     const billing = [
         { icon: <ShoppingCart size={20} />, label: 'Billing Counter', path: '/billing' },
-        { icon: <ClipboardList size={20} />, label: 'Sales History', path: '/orders' },
+        { icon: <ClipboardList size={20} />, label: 'Billing History', path: '/orders' },
     ];
     const stock = [
         { icon: <Package size={20} />, label: 'Products', path: '/products' },

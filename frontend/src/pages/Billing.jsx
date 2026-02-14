@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { productService, billService } from '../services';
 import { getData } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -11,7 +11,7 @@ const Billing = () => {
     const barcodeInputRef = useRef(null);
     const scanLockRef = useRef(0);
     const { success: toastSuccess, error: toastError } = useToast();
-    const [products, setProducts] = useState([]);
+    const [allProducts, setAllProducts] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [cart, setCart] = useState([]);
     const [customer, setCustomer] = useState({ name: '', phone: '' });
@@ -32,16 +32,41 @@ const Billing = () => {
 
     const fetchProducts = useCallback(async () => {
         try {
-            const resp = searchTerm ? await productService.search(searchTerm) : await productService.getAll();
-            setProducts(getData(resp) || []);
+            const resp = await productService.getAll();
+            setAllProducts(getData(resp) || []);
         } catch (err) {
             toastError(err?.message || 'Failed to load products');
         }
-    }, [searchTerm, toastError]);
+    }, [toastError]);
 
     useEffect(() => {
         fetchProducts();
     }, [fetchProducts]);
+
+    const filteredProducts = useMemo(() => {
+        const q = (searchTerm || '').trim().toLowerCase();
+        if (!q) return allProducts;
+        return allProducts.filter(
+            (p) =>
+                (p.name && p.name.toLowerCase().includes(q)) ||
+                (p.barcode && String(p.barcode).toLowerCase().includes(q))
+        );
+    }, [allProducts, searchTerm]);
+
+    const handleSearchKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const first = filteredProducts[0];
+            if (first && (first.stocks ?? 0) > 0) {
+                addToCart(first);
+                searchInputRef.current?.focus();
+            } else if (first) {
+                toastError('Product is out of stock');
+            } else if ((searchTerm || '').trim()) {
+                toastError('No products found');
+            }
+        }
+    };
 
     useEffect(() => {
         barcodeInputRef.current?.focus();
@@ -108,7 +133,7 @@ const Billing = () => {
                 return;
             }
             addToCart(product);
-            setProducts(prev => prev.some(p => p.id === product.id) ? prev : [...prev, product]);
+            setAllProducts(prev => prev.some(p => p.id === product.id) ? prev : [...prev, product]);
             toastSuccess(`Added: ${product.name}`);
             setCartHighlight(true);
             setTimeout(() => setCartHighlight(false), 800);
@@ -140,7 +165,7 @@ const Billing = () => {
         setCart(cart.map(i => {
             if (i.id !== id) return i;
             const newQty = i.quantity + delta;
-            const originalProduct = products.find(p => p.id === id);
+            const originalProduct = allProducts.find(p => p.id === id);
             const availableStock = originalProduct?.stocks ?? i.stocks ?? 0;
             if (newQty <= 0) return null;
             if (newQty > availableStock) {
@@ -156,7 +181,7 @@ const Billing = () => {
     const canCheckout = () => {
         if (cart.length === 0) return false;
         for (const item of cart) {
-            const p = products.find(x => x.id === item.id) || item;
+            const p = allProducts.find(x => x.id === item.id) || item;
             const available = p.stocks ?? 0;
             if (item.quantity > available) return false;
         }
@@ -228,8 +253,8 @@ const Billing = () => {
                 )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(300px, 420px)', gap: '24px' }} className="pos-grid">
-                <div className="card" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
+            <div className="pos-grid">
+                <div className="card pos-products" style={{ padding: '0', display: 'flex', flexDirection: 'column' }}>
                     <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
                         <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '10px' }}>Scan barcode</label>
                         <div style={{ position: 'relative', marginBottom: '14px' }}>
@@ -264,9 +289,11 @@ const Billing = () => {
                             <input
                                 ref={searchInputRef}
                                 style={{ paddingLeft: '48px', background: 'var(--input-bg)' }}
-                                placeholder="Search product — press Enter to add"
+                                placeholder="Search by name or barcode — Enter to add first"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
+                                onKeyDown={handleSearchKeyDown}
+                                aria-label="Search products"
                             />
                         </div>
                     </div>
@@ -282,123 +309,124 @@ const Billing = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {products.map(p => (
-                                    <tr key={p.id} tabIndex={0} onKeyDown={(e) => handleProductKeyDown(e, p)} style={{ cursor: 'pointer' }}>
-                                        <td style={{ fontWeight: '700', color: 'var(--text-main)' }}>{p.name}</td>
-                                        <td style={{ color: 'var(--text-muted)' }}>₹{parseFloat(p.price).toFixed(2)}</td>
-                                        <td>
-                                            <span style={{ fontSize: '13px', fontWeight: '600', color: (p.stocks ?? 0) < 10 ? 'var(--danger)' : 'var(--text-muted)' }}>
-                                                {(p.stocks ?? 0)} left
-                                            </span>
-                                        </td>
-                                        <td style={{ textAlign: 'right' }}>
-                                            <button type="button" onClick={() => { addToCart(p); searchInputRef.current?.focus(); }} className="btn btn-primary" disabled={(p.stocks ?? 0) <= 0} style={{ padding: '8px 12px', minWidth: 'auto', fontSize: '13px' }}>
-                                                <Plus size={18} />
-                                            </button>
+                                {filteredProducts.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={4} style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontWeight: '600' }}>
+                                            {allProducts.length === 0 ? 'Loading products...' : 'No products found'}
                                         </td>
                                     </tr>
-                                ))}
+                                ) : (
+                                    filteredProducts.map(p => (
+                                        <tr key={p.id} tabIndex={0} onKeyDown={(e) => handleProductKeyDown(e, p)} style={{ cursor: 'pointer' }}>
+                                            <td style={{ fontWeight: '700', color: 'var(--text-main)' }}>{p.name}</td>
+                                            <td style={{ color: 'var(--text-muted)' }}>₹{parseFloat(p.price).toFixed(2)}</td>
+                                            <td>
+                                                <span style={{ fontSize: '13px', fontWeight: '600', color: (p.stocks ?? 0) < 10 ? 'var(--danger)' : 'var(--text-muted)' }}>
+                                                    {(p.stocks ?? 0)} left
+                                                </span>
+                                            </td>
+                                            <td style={{ textAlign: 'right' }}>
+                                                <button type="button" onClick={() => { addToCart(p); searchInputRef.current?.focus(); }} className="btn btn-primary" disabled={(p.stocks ?? 0) <= 0} style={{ padding: '8px 12px', minWidth: 'auto', fontSize: '13px' }}>
+                                                    <Plus size={18} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <div className={`card cart-panel ${cartHighlight ? 'cart-panel--highlight' : ''}`} style={{ display: 'flex', flexDirection: 'column', padding: '0', overflow: 'hidden' }}>
-                    <div style={{ padding: '20px 24px', background: 'var(--primary-gradient)', color: 'white', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 4px 14px var(--primary-glow)' }}>
+                <div className={`card cart-panel ${cartHighlight ? 'cart-panel--highlight' : ''}`}>
+                    <div className="cart-panel__header">
                         <ShoppingCart size={24} />
-                        <h3 style={{ fontSize: '18px', fontWeight: '800' }}>Your cart</h3>
-                        <span style={{ marginLeft: 'auto', padding: '4px 12px', background: 'rgba(255,255,255,0.2)', borderRadius: '100px', fontSize: '12px', fontWeight: '700' }}>
-                            {cart.length} items
-                        </span>
+                        <h3 className="cart-panel__title">Your cart</h3>
+                        <span className="cart-panel__badge">{cart.length} items</span>
                     </div>
                     {cart.length > 0 && runningProfit > 0 && (
-                        <div style={{ padding: '8px 24px', background: 'var(--success-soft)', color: 'var(--success)', fontSize: '13px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div className="cart-panel__profit">
                             <TrendingUp size={16} /> Profit: ₹{runningProfit.toFixed(2)}
                         </div>
                     )}
 
-                    <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-                        <p style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '10px', textTransform: 'uppercase' }}>Customer (optional)</p>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div className="cart-panel__customer">
+                        <p className="cart-panel__label">Customer (optional)</p>
+                        <div className="cart-panel__customer-fields">
                             <input
                                 placeholder="Walk-in Customer"
                                 value={customer.name}
                                 onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-                                style={{ padding: '10px 14px', fontSize: '14px' }}
+                                className="input"
                             />
                             <input
                                 placeholder="Phone (optional)"
                                 value={customer.phone}
                                 onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
-                                style={{ padding: '10px 14px', fontSize: '14px' }}
+                                className="input"
                             />
                         </div>
                     </div>
 
-                    <div style={{ padding: '20px 24px', flex: 1, overflowY: 'auto', minHeight: '220px' }}>
+                    <div className="cart-panel__items">
                         {cart.length === 0 ? (
-                            <div className="empty-state" style={{ padding: '40px 0' }}>
-                                <ShoppingBag size={48} className="empty-state-icon" style={{ marginBottom: '12px' }} />
-                                <p style={{ fontWeight: '600', color: 'var(--text-muted)' }}>Cart is empty</p>
-                                <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginTop: '4px' }}>Search and add products to start</p>
+                            <div className="cart-panel__empty">
+                                <ShoppingBag size={48} className="empty-state-icon" />
+                                <p className="cart-panel__empty-title">Cart is empty</p>
+                                <p className="cart-panel__empty-sub">Search and add products to start</p>
                             </div>
                         ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <ul className="cart-panel__list">
                                 {cart.map(item => (
-                                    <div key={item.id} style={{ display: 'flex', gap: '12px', paddingBottom: '12px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <p style={{ fontWeight: '700', color: 'var(--text-main)' }}>{item.name}</p>
-                                            <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>₹{parseFloat(item.price).toFixed(2)} × {item.unit}</p>
+                                    <li key={item.id} className="cart-panel__row">
+                                        <div className="cart-panel__row-info">
+                                            <span className="cart-panel__row-name">{item.name}</span>
+                                            <span className="cart-panel__row-meta">₹{parseFloat(item.price).toFixed(2)} × {item.unit}</span>
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', background: 'var(--input-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                                                <button type="button" onClick={() => updateQuantity(item.id, -1)} style={{ border: 'none', background: 'transparent', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}><Minus size={14} /></button>
-                                                <span style={{ width: '36px', textAlign: 'center', fontWeight: '700', fontSize: '14px', color: 'var(--text-main)' }}>{item.quantity}</span>
-                                                <button type="button" onClick={() => updateQuantity(item.id, 1)} style={{ border: 'none', background: 'transparent', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}><Plus size={14} /></button>
+                                        <div className="cart-panel__row-actions">
+                                            <div className="cart-panel__qty">
+                                                <button type="button" onClick={() => updateQuantity(item.id, -1)} className="cart-panel__qty-btn" aria-label="Decrease"><Minus size={14} /></button>
+                                                <span className="cart-panel__qty-val">{item.quantity}</span>
+                                                <button type="button" onClick={() => updateQuantity(item.id, 1)} className="cart-panel__qty-btn" aria-label="Increase"><Plus size={14} /></button>
                                             </div>
-                                            <button type="button" onClick={() => removeFromCart(item.id)} style={{ color: 'var(--danger)', background: 'transparent', border: 'none', padding: '8px', cursor: 'pointer' }} aria-label="Remove"><X size={18} /></button>
+                                            <span className="cart-panel__row-price">₹{(item.price * item.quantity).toFixed(2)}</span>
+                                            <button type="button" onClick={() => removeFromCart(item.id)} className="cart-panel__remove" aria-label="Remove"><X size={18} /></button>
                                         </div>
-                                    </div>
+                                    </li>
                                 ))}
-                            </div>
+                            </ul>
                         )}
                     </div>
 
                     {cart.length > 0 && (
-                        <div style={{ padding: '24px', borderTop: '1px solid var(--border)', background: 'var(--card-bg)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontWeight: '600', color: 'var(--text-muted)', fontSize: '14px' }}>
-                                <span>Subtotal</span>
-                                <span>₹{subtotal.toFixed(2)}</span>
+                        <div className="cart-panel__footer">
+                            <div className="cart-panel__totals">
+                                <div className="cart-panel__total-row">
+                                    <span>Subtotal</span>
+                                    <span>₹{subtotal.toFixed(2)}</span>
+                                </div>
+                                <div className="cart-panel__total-row">
+                                    <span>GST</span>
+                                    <span>₹{gstTotal.toFixed(2)}</span>
+                                </div>
+                                <div className="cart-panel__total-row cart-panel__discount-row">
+                                    <span>Discount (₹)</span>
+                                    <input type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} className="cart-panel__discount-input" />
+                                </div>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontWeight: '600', color: 'var(--text-muted)', fontSize: '14px' }}>
-                                <span>GST</span>
-                                <span>₹{gstTotal.toFixed(2)}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', fontWeight: '600', color: 'var(--text-muted)', fontSize: '14px' }}>
-                                <span>Discount (₹)</span>
-                                <input type="number" min="0" step="0.01" value={discount} onChange={(e) => setDiscount(e.target.value)} style={{ width: '100px', padding: '8px 12px', textAlign: 'right', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--input-bg)', color: 'var(--text-main)' }} />
-                            </div>
-                            <div style={{ marginBottom: '12px' }}>
-                                <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '8px', display: 'block', textTransform: 'uppercase' }}>Payment</label>
-                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            <div className="cart-panel__payment">
+                                <label className="cart-panel__label">Payment</label>
+                                <div className="cart-panel__payment-btns">
                                     {['cash', 'upi', 'card'].map(m => (
-                                        <button key={m} type="button" onClick={() => setPaymentMethod(m)} style={{ padding: '10px 16px', borderRadius: 'var(--radius-md)', border: `1px solid ${paymentMethod === m ? 'var(--primary)' : 'var(--border)'}`, background: paymentMethod === m ? 'var(--primary-glow)' : 'transparent', color: paymentMethod === m ? 'var(--primary-light)' : 'var(--text-muted)', fontWeight: '600', textTransform: 'capitalize', cursor: 'pointer', fontSize: '13px' }}>{m}</button>
+                                        <button key={m} type="button" onClick={() => setPaymentMethod(m)} className={`cart-panel__pay-btn ${paymentMethod === m ? 'active' : ''}`}>{m}</button>
                                     ))}
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '22px', marginTop: '16px', color: 'var(--text-main)', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                            <div className="cart-panel__grand-total">
                                 <span>Total</span>
-                                <span style={{ color: 'var(--primary-light)' }}>₹{grandTotal.toFixed(2)}</span>
+                                <span>₹{grandTotal.toFixed(2)}</span>
                             </div>
-
-                            <button
-                                data-pos-checkout
-                                type="button"
-                                className="btn btn-primary"
-                                style={{ width: '100%', marginTop: '20px', padding: '16px', justifyContent: 'center', fontSize: '16px' }}
-                                onClick={handleCheckout}
-                                disabled={isProcessing || !canCheckout()}
-                            >
+                            <button data-pos-checkout type="button" className="btn btn-primary cart-panel__checkout" onClick={handleCheckout} disabled={isProcessing || !canCheckout()}>
                                 {isProcessing ? 'Saving...' : <><Printer size={20} /> Print & Complete (F2)</>}
                             </button>
                         </div>
@@ -408,14 +436,18 @@ const Billing = () => {
 
             {/* Receipt Modal */}
             {showReceipt && lastBill && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, padding: '20px' }}>
-                    <div className="card animate-fade" id="printable-bill" style={{ backgroundColor: 'white', padding: '40px', width: '100%', maxWidth: '450px', borderRadius: 'var(--radius-xl)' }}>
+                <div className="receipt-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, padding: '20px' }}>
+                    <div className="card animate-fade receipt-modal-content" id="printable-bill" style={{ backgroundColor: 'white', padding: '40px', width: '100%', maxWidth: '450px', borderRadius: 'var(--radius-xl)' }}>
                         <style>{`
                             @media print {
                                 body * { visibility: hidden; }
                                 #printable-bill, #printable-bill * { visibility: visible; }
-                                #printable-bill { position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; box-shadow: none; border-radius: 0; }
+                                #printable-bill { position: absolute !important; left: 0 !important; top: 0 !important; width: 80mm !important; max-width: 80mm !important; min-width: 80mm !important; padding: 4mm !important; margin: 0 !important; box-shadow: none !important; border-radius: 0 !important; font-size: 11px !important; }
+                                #printable-bill h2 { font-size: 14px !important; }
+                                #printable-bill p, #printable-bill td, #printable-bill th { font-size: 10px !important; }
+                                #printable-bill table { width: 100% !important; table-layout: fixed !important; }
                                 .no-print { display: none !important; }
+                                @page { size: 80mm auto; margin: 2mm; }
                             }
                         `}</style>
                         <div style={{ textAlign: 'center', marginBottom: '32px', borderBottom: '2px dashed var(--border)', paddingBottom: '32px' }}>
@@ -436,7 +468,8 @@ const Billing = () => {
                             </div>
                         </div>
 
-                        <table style={{ width: '100%', marginBottom: '24px' }}>
+                        <div className="receipt-table-wrap">
+                        <table className="receipt-table" style={{ width: '100%', marginBottom: '24px' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid black' }}>
                                     <th style={{ textAlign: 'left', padding: '8px 0', color: 'black' }}>Item</th>
@@ -454,6 +487,7 @@ const Billing = () => {
                                 ))}
                             </tbody>
                         </table>
+                        </div>
 
                         <div style={{ borderTop: '2px solid black', paddingTop: '16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>

@@ -11,6 +11,12 @@ const getBills = asyncHandler(async (req, res) => {
     res.status(200).json({ success: true, data: bills });
 });
 
+const getBillingHistory = asyncHandler(async (req, res) => {
+    const { from: dateFrom, to: dateTo, q, limit } = req.query;
+    const bills = await billService.getBillingHistory({ dateFrom, dateTo, q, limit });
+    res.status(200).json({ success: true, data: bills });
+});
+
 const getBill = asyncHandler(async (req, res) => {
     const bill = await billService.getBillDetails(req.params.id);
     if (!bill) {
@@ -56,6 +62,7 @@ const getSalesByTime = asyncHandler(async (req, res) => {
 module.exports = {
     generateBill,
     getBills,
+    getBillingHistory,
     getBill,
     getReports,
     getTopProducts,

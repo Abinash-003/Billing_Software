@@ -17,6 +17,14 @@ export const productService = {
 export const billService = {
     create: (data) => api.post('/bills', data),
     getRecent: () => api.get('/bills'),
+    getHistory: (params = {}) => {
+        const sp = new URLSearchParams();
+        if (params.from) sp.set('from', params.from);
+        if (params.to) sp.set('to', params.to);
+        if (params.q) sp.set('q', params.q);
+        if (params.limit) sp.set('limit', params.limit);
+        return api.get(`/bills/history?${sp.toString()}`);
+    },
     getById: (id) => api.get(`/bills/${id}`),
     getReports: (period) => api.get(`/bills/reports?period=${period}`),
     getTopProducts: (period) => api.get(`/bills/top-products?period=${period}`),
